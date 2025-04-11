@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador Ideogram</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6">
+    <h1 class="text-2xl font-bold text-center text-gray-800">🖼️ Generador de Imágenes AI</h1>
+
+    <form id="imageForm" class="space-y-4">
+      <div>
+        <label class="block text-gray-700 mb-1">Prompt</label>
+        <input type="text" name="prompt" class="w-full p-2 border rounded-md" required>
+      </div>
+
+      <div>
+        <label class="block text-gray-700 mb-1">Tipo de Acción</label>
+        <select name="action" id="actionSelect" class="w-full p-2 border rounded-md">
+          <option value="generate">Generate</option>
+          <option value="reframe">Reframe</option>
+          <option value="remix">Remix</option>
+        </select>
+      </div>
+
+      <div id="imageUrlField" class="hidden">
+        <label class="block text-gray-700 mb-1">URL de Imagen</label>
+        <input type="url" name="image_url" class="w-full p-2 border rounded-md">
+      </div>
+
+      <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 transition">
+        Enviar
+      </button>
+    </form>
+
+    <div id="result" class="text-center mt-4"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('imageForm');
+    const actionSelect = document.getElementById('actionSelect');
+    const imageUrlField = document.getElementById('imageUrlField');
+    const resultDiv = document.getElementById('result');
+
+    actionSelect.addEventListener('change', () => {
+      const show = actionSelect.value !== 'generate';
+      imageUrlField.classList.toggle('hidden', !show);
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resultDiv.innerHTML = "Procesando imagen... ⏳";
+
+      const formData = new FormData(form);
+      const action = formData.get('action');
+      const prompt = formData.get('prompt');
+      const image_url = formData.get('image_url');
+
+      const body = { prompt };
+      if (action !== 'generate') body.image_url = image_url;
+
+      try {
+        const response = await fetch(`/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        if (data.url) {
+          resultDiv.innerHTML = `<img src="${data.url}" class="mt-4 rounded-md shadow-lg w-full">`;
+        } else {
+          resultDiv.textContent = "Error: " + (data.error || 'algo salió mal');
+        }
+      } catch (err) {
+        resultDiv.textContent = "Error al conectar con el servidor.";
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
+
