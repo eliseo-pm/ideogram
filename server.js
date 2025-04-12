@@ -1,87 +1,66 @@
-require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-const { v2: cloudinary } = require('cloudinary');
+const cloudinary = require('cloudinary').v2;
+const { OpenAI } = require('openai');
+const path = require('path');
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Configura Cloudinary
+// Configurar Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Ruta para generar imagen con Ideogram
+// Configurar OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// Simulación de /generate usando OpenAI DALL·E
 app.post('/generate', async (req, res) => {
   try {
-    const prompt = req.body.prompt;
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt requerido' });
 
-    const response = await axios.post('https://api.ideogram.ai/generate', {
-      prompt: prompt
+    // Generar imagen
+    const response = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      response_format: 'url'
     });
 
-    const imageUrl = response.data.image_url;
+    const imageUrl = response.data[0].url;
 
-    // Subir a Cloudinary
-    const uploadedImage = await cloudinary.uploader.upload(imageUrl, {
+    // Subir imagen a Cloudinary
+    const uploaded = await cloudinary.uploader.upload(imageUrl, {
       format: 'png'
     });
 
-    res.json({ url: uploadedImage.secure_url });
+    res.json({ image_url: uploaded.secure_url });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error al generar o subir la imagen' });
-  }
-});
-// Ruta para reframe
-app.post('/reframe', async (req, res) => {
-  try {
-    const { image_url, prompt } = req.body;
-
-    const response = await axios.post('https://api.ideogram.ai/reframe', {
-      image_url,
-      prompt
-    });
-
-    const resultImage = response.data.image_url;
-
-    const uploadedImage = await cloudinary.uploader.upload(resultImage, {
-      format: 'png'
-    });
-
-    res.json({ url: uploadedImage.secure_url });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error en /reframe' });
+    console.error('Error al generar o subir imagen:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Error al generar o subir imagen' });
   }
 });
 
-// Ruta para remix
-app.post('/remix', async (req, res) => {
-  try {
-    const { image_url, prompt } = req.body;
-
-    const response = await axios.post('https://api.ideogram.ai/remix', {
-      image_url,
-      prompt
-    });
-
-    const resultImage = response.data.image_url;
-
-    const uploadedImage = await cloudinary.uploader.upload(resultImage, {
-      format: 'png'
-    });
-
-    res.json({ url: uploadedImage.secure_url });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error en /remix' });
-  }
+// Simulaciones vacías para reframe/remix
+app.post('/reframe', (req, res) => {
+  res.json({ message: 'Reframe simulado con éxito (fingiendo)' });
 });
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor corriendo en el puerto ${PORT}`));
-const path = require('path');
-app.use(express.static(path.join(__dirname, 'public')));
+
+app.post('/remix', (req, res) => {
+  res.json({ message: 'Remix simulado con éxito (fingiendo)' });
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
+});
 
