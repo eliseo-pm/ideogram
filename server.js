@@ -1,87 +1,69 @@
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import { Configuration, OpenAIApi } from 'openai';
-import https from 'https';
-import { v2 as cloudinary } from 'cloudinary';
-import fs from 'fs';
-import path from 'path';
+const express = require("express");
+const multer = require("multer");
+const { Configuration, OpenAIApi } = require("openai");
+const cloudinary = require("cloudinary").v2;
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
+const upload = multer();
 const PORT = process.env.PORT || 8080;
 
-app.use(cors());
-app.use(bodyParser.json());
-
-// Configuración de OpenAI
+// OpenAI setup
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
 
-// Configuración de Cloudinary
+// Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Ruta principal de prueba
-app.get('/', (req, res) => {
-  res.send('Servidor funcionando y esperando prompts 🧠');
-});
+app.use(express.static("public"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Ruta para generar imágenes y subirlas a Cloudinary
-app.post('/generate', async (req, res) => {
-  const { prompt, size } = req.body;
-
-  if (!prompt || !size) {
-    return res.status(400).json({ error: 'Faltan campos requeridos: prompt o size' });
-  }
-
+// Endpoint para generar imagen
+app.post("/generate", async (req, res) => {
   try {
-    // 1. Generar imagen con OpenAI
-    const response = await openai.createImage({
+    const prompt = req.body.prompt;
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    // Generar imagen con OpenAI
+    const response = await openai.images.generate({
+      model: "dall-e-3",
       prompt,
       n: 1,
-      size,
-      response_format: 'url',
+      size: "1024x1024",
     });
 
     const imageUrl = response.data.data[0].url;
-    const filename = `image-${Date.now()}.png`;
-    const filepath = path.join('/tmp', filename); // usa /tmp porque Railway permite escritura ahí
 
-    // 2. Descargar imagen temporalmente
-    const downloadImage = (url, dest) =>
-      new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(dest);
-        https.get(url, (res) => {
-          if (res.statusCode !== 200) return reject(new Error('Fallo al descargar imagen'));
-          res.pipe(file);
-          file.on('finish', () => file.close(resolve));
-        }).on('error', reject);
-      });
+    // Descargar la imagen
+    const imageResponse = await fetch(imageUrl);
+    const buffer = await imageResponse.arrayBuffer();
+    const imagePath = path.join(__dirname, "image.png");
+    fs.writeFileSync(imagePath, Buffer.from(buffer));
 
-    await downloadImage(imageUrl, filepath);
-
-    // 3. Subir a Cloudinary
-    const cloudinaryResult = await cloudinary.uploader.upload(filepath, {
-      folder: 'ideogram-clone',
+    // Subir a Cloudinary
+    const result = await cloudinary.uploader.upload(imagePath, {
+      folder: "ideogram-clone",
+      format: "png",
     });
 
-    // 4. Eliminar archivo temporal
-    fs.unlinkSync(filepath);
+    fs.unlinkSync(imagePath); // eliminar temporal
 
-    // 5. Enviar URL final
-    res.json({ imageUrl: cloudinaryResult.secure_url });
+    res.json({ imageUrl: result.secure_url });
   } catch (err) {
-    console.error('❌ Error al generar o subir imagen:', err);
-    res.status(500).json({ error: 'Error al generar o subir la imagen' });
+    console.error("Error al generar o subir la imagen:", err);
+    res.status(500).json({ error: "Ocurrió un error 😢" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
 
