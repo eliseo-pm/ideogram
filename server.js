@@ -9,4 +9,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
-
+app.get('/test-env', (req, res) => {
+  res.json({ openaiKey: process.env.OPENAI_API_KEY ? 'La clave está configurada' : 'La clave NO está configurada' });
+});
