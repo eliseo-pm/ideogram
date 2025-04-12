@@ -1,22 +1,29 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import OpenAI from 'openai';
-import cloudinary from 'cloudinary';
-import fs from 'fs';
-import fetch from 'node-fetch';
+// server.js
 
-dotenv.config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const { Configuration, OpenAIApi } = require('openai');
+const cloudinary = require('cloudinary').v2;
+const cors = require('cors');
+const fs = require('fs');
+const https = require('https');
+const path = require('path');
+
+require('dotenv').config();
+
 const app = express();
+const PORT = process.env.PORT || 8080;
+
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
 });
+const openai = new OpenAIApi(configuration);
 
-// Configura Cloudinary
-cloudinary.v2.config({
+cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
@@ -26,36 +33,47 @@ app.post('/generate', async (req, res) => {
   const { prompt, size } = req.body;
 
   try {
-    const response = await openai.images.generate({
+    const response = await openai.createImage({
       prompt,
-      model: "dall-e-3",
-      size: size || "1024x1024",
-      response_format: "url"
+      n: 1,
+      size,
+      response_format: 'url'
     });
 
-    const imageUrl = response.data[0].url;
-    const imageResponse = await fetch(imageUrl);
-    const buffer = await imageResponse.buffer();
-    const tmpFile = './temp.png';
+    const imageUrl = response.data.data[0].url;
 
-    fs.writeFileSync(tmpFile, buffer);
+    const fileName = `image_${Date.now()}.png`;
+    const filePath = path.join(__dirname, fileName);
 
-    // Subir a Cloudinary
-    const cloudinaryResult = await cloudinary.v2.uploader.upload(tmpFile, {
-      folder: 'ideogram_fake',
-      format: 'png',
+    const file = fs.createWriteStream(filePath);
+    https.get(imageUrl, (response) => {
+      response.pipe(file);
+      file.on('finish', async () => {
+        file.close();
+
+        try {
+          const cloudinaryRes = await cloudinary.uploader.upload(filePath, {
+            folder: 'ideogram',
+            resource_type: 'image',
+            format: 'png',
+          });
+
+          fs.unlinkSync(filePath); // Borra archivo local
+          res.json({ image_url: cloudinaryRes.secure_url });
+        } catch (err) {
+          console.error('Error subiendo a Cloudinary:', err.message);
+          res.status(500).json({ error: 'Error al subir imagen' });
+        }
+      });
     });
 
-    fs.unlinkSync(tmpFile); // Borrar archivo temporal
-
-    res.json({ image_url: cloudinaryResult.secure_url });
   } catch (err) {
-    console.error('Error al generar o subir la imagen', err);
+    console.error('Error generando imagen:', err.message);
     res.status(500).json({ error: 'Error al generar o subir la imagen' });
   }
 });
 
-app.listen(8080, () => {
-  console.log('🚀 Servidor corriendo en el puerto 8080');
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
 
