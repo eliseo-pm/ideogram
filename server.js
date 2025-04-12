@@ -1,5 +1,3 @@
-// server.js
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Configuration, OpenAIApi } = require('openai');
@@ -8,7 +6,6 @@ const cors = require('cors');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
-
 require('dotenv').config();
 
 const app = express();
@@ -41,16 +38,14 @@ app.post('/generate', async (req, res) => {
     });
 
     const imageUrl = response.data.data[0].url;
-
     const fileName = `image_${Date.now()}.png`;
     const filePath = path.join(__dirname, fileName);
-
     const file = fs.createWriteStream(filePath);
+
     https.get(imageUrl, (response) => {
       response.pipe(file);
       file.on('finish', async () => {
         file.close();
-
         try {
           const cloudinaryRes = await cloudinary.uploader.upload(filePath, {
             folder: 'ideogram',
